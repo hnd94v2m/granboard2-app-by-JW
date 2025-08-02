@@ -1,23 +1,25 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Granboard } from "./Granboard";
-import { SegmentID, CreateSegment } from "./DartboardUtilities";
+import { SegmentID } from "./DartboardUtilities";
 
-const START_SCORE = 501; // 你可以改成301、701等
+const START_SCORE = 501;
 
 export default function App() {
   const [score, setScore] = useState(START_SCORE);
   const [roundThrows, setRoundThrows] = useState<number[]>([]);
   const [granboard, setGranboard] = useState<Granboard | undefined>();
   const [log, setLog] = useState<string[]>([]);
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // 初次載入時自動連線藍牙
   useEffect(() => {
-    Granboard.ConnectToBoard()
-      .then(setGranboard)
-      .catch(err => alert("藍牙連線失敗：" + err.message));
-  }, []);
+    // 不再自動嘗試連線，改為點擊按鈕才連線
+    return () => {
+      // 卸載時移除 callback
+      if (granboard) granboard.segmentHitCallback = undefined;
+    };
+  }, [granboard]);
 
-  // 處理藍牙靶打中的回呼
   useEffect(() => {
     if (!granboard) return;
     granboard.segmentHitCallback = (segment) => {
@@ -33,9 +35,9 @@ export default function App() {
           `命中 ${segment.LongName}（分值${segment.Value}），剩餘：${Math.max(score - segment.Value, 0)}`,
           ...l,
         ]);
-        if (newThrows.length >= 3) { 
+        if (newThrows.length >= 3) {
           setLog(l => [`本回合結束（3鏢）`, ...l]);
-          setTimeout(() => setRoundThrows([]), 400); // 0.4秒後自動重置回合
+          setTimeout(() => setRoundThrows([]), 400);
         }
         return newThrows;
       });
@@ -56,10 +58,39 @@ export default function App() {
     setLog(l => ["分數已重設", ...l]);
   };
 
+  const handleConnect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const board = await Granboard.ConnectToBoard();
+      setGranboard(board);
+      setLog(l => ["藍牙連線成功", ...l]);
+    } catch (err: any) {
+      setError("藍牙連線失敗：" + (err?.message || String(err)));
+      setGranboard(undefined);
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   return (
     <div style={{ maxWidth: 500, margin: "1rem auto", fontFamily: "sans-serif" }}>
       <h1>單人藍牙自動計分</h1>
       <h2>分數：{score}</h2>
+      <div>
+        {!granboard ? (
+          <div style={{ marginBottom: "1em" }}>
+            <button onClick={handleConnect} disabled={connecting}>
+              {connecting ? "連線中..." : "連接藍牙飛鏢板"}
+            </button>
+            <div style={{ color: "red", marginTop: "0.5em" }}>
+              {error ?? "請點擊上方按鈕連接 Granboard 道具"}
+            </div>
+          </div>
+        ) : (
+          <div style={{ color: "#4dd599", marginBottom: "1em" }}>已連線 Granboard！</div>
+        )}
+      </div>
       <div>本回合：{roundThrows.join(", ") || "尚未投鏢"}（{roundThrows.length}/3）</div>
       <div style={{ margin: "1em 0" }}>
         <button onClick={handleEndRound}>手動結束回合</button>
@@ -69,9 +100,6 @@ export default function App() {
       <ol>
         {log.slice(0, 10).map((line, i) => <li key={i}>{line}</li>)}
       </ol>
-      {!granboard && (
-        <div style={{ color: "red" }}>請開啟藍牙並連接 Granboard 道具</div>
-      )}
     </div>
   );
 }
