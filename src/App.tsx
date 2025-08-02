@@ -3,6 +3,8 @@ import { Granboard } from "./Granboard";
 import { SegmentID, SegmentType } from "./DartboardUtilities";
 
 const START_SCORE = 501;
+const TOTAL_ROUNDS = 10;
+const HISTORY_ROWS = 6;
 
 type Throw = {
   value: number;
@@ -18,6 +20,8 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [roundStartingScore, setRoundStartingScore] = useState<number>(START_SCORE);
+  const [histories, setHistories] = useState<number[]>([]);
+  const [round, setRound] = useState(1);
 
   useEffect(() => {
     return () => {
@@ -27,11 +31,10 @@ export default function App() {
 
   useEffect(() => {
     if (!granboard) return;
+
     granboard.segmentHitCallback = (segment) => {
-      // 回合起始分數快照
       if (roundThrows.length === 0) setRoundStartingScore(score);
 
-      // 處理 RESET
       if (segment.ID === SegmentID.RESET_BUTTON) {
         setLog(l => ["手動按下RESET_BUTTON，回合重置", ...l]);
         setRoundThrows([]);
@@ -39,11 +42,8 @@ export default function App() {
         return;
       }
 
-      // BUST 規則檢查
       let nextScore = score - segment.Value;
 
-      // 若剩 1 分（不能結束），或低於 0，BUST
-      // 01 規則，唯有「雙倍命中使分數歸0」才可結束比賽
       if (
         nextScore < 0 ||
         nextScore === 1 ||
@@ -51,7 +51,7 @@ export default function App() {
       ) {
         setLog(l => [
           `爆鏢 BUST！（本回合所有分數作廢，分數回到${roundStartingScore}）`,
-          ...l,
+          ...l
         ]);
         setScore(roundStartingScore);
         setTimeout(() => setRoundThrows([]), 400);
@@ -59,7 +59,6 @@ export default function App() {
         return;
       }
 
-      // 命中並非BUST
       setScore(nextScore);
       setRoundThrows((t) => {
         const newThrows = [
@@ -72,18 +71,23 @@ export default function App() {
         ];
         setLog(l => [
           `命中 ${segment.LongName}（分值${segment.Value}），剩餘：${nextScore}`,
-          ...l,
+          ...l
         ]);
-        // 回合結束或勝利（分數為0）
-        if (
-          nextScore === 0 ||
-          newThrows.length >= 3
-        ) {
+        // WIN or 回合結束
+        if (nextScore === 0 || newThrows.length >= 3) {
+          // 記錄歷史分數
+          setHistories(h => {
+            const latest = nextScore === 0 ? 0 : nextScore;
+            const old = [...h];
+            old.push(score - nextScore);
+            return old.slice(-HISTORY_ROWS);
+          });
+          setRound(r => Math.min(r + 1, TOTAL_ROUNDS));
           setLog(l => [
             nextScore === 0
               ? "恭喜結束遊戲！（最後一鏢必須雙倍區）"
               : "本回合結束（3鏢）",
-            ...l,
+            ...l
           ]);
           setTimeout(() => setRoundThrows([]), 400);
         }
@@ -97,6 +101,16 @@ export default function App() {
   }, [granboard, score, roundThrows, roundStartingScore]);
 
   const handleEndRound = () => {
+    if (roundThrows.length > 0) {
+      // 記錄本回合分數，設0代表無分
+      setHistories(h => {
+        const total = roundThrows.reduce((s, t) => s + t.value, 0);
+        const old = [...h];
+        old.push(total);
+        return old.slice(-HISTORY_ROWS);
+      });
+      setRound(r => Math.min(r + 1, TOTAL_ROUNDS));
+    }
     setLog(l => [`手動結束回合`, ...l]);
     setRoundThrows([]);
     setRoundStartingScore(score);
@@ -106,6 +120,8 @@ export default function App() {
     setScore(START_SCORE);
     setRoundThrows([]);
     setRoundStartingScore(START_SCORE);
+    setRound(1);
+    setHistories([]);
     setLog(l => ["分數已重設", ...l]);
   };
 
@@ -124,37 +140,317 @@ export default function App() {
     }
   };
 
+  // 色系設定
+  const RED = "#C62F33"; // 近正紅
+  const BANNER_RED = "#DE5459"; // 比正紅稍淺
+  const ROUND_GRAY = "#252525"; // 深灰
+  const BG_DARK = "#181818"; // 黑背景
+  const MENU_BTN_GRAY = "#353535";
+  const WHITE = "#FAF3E8";
+  const CURRENT_SCORE = "#D9DFE6";
+  const SCORE_SHADOW = "0 4px 24px #000a, 0 8px 40px #4444";
+
   return (
-    <div style={{ maxWidth: 500, margin: "1rem auto", fontFamily: "sans-serif" }}>
-      <h1>單人藍牙自動計分</h1>
-      <h2>分數：{score}</h2>
-      <div>
+    <div
+      style={{
+        background: BG_DARK,
+        minHeight: "100vh",
+        position: "relative",
+        margin: 0,
+        padding: 0,
+        boxSizing: "border-box",
+        fontFamily: "sans-serif",
+        width: "100vw",
+        overflowX: "hidden"
+      }}
+    >
+      {/* 左上角 501 比賽名稱區塊 */}
+      <div style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: 160,
+        height: 40,
+        background: BANNER_RED,
+        display: "flex",
+        alignItems: "center",
+        paddingLeft: 10,
+        paddingTop: 5,
+        paddingBottom: 5,
+        zIndex: 20,
+        color: "#fff",
+        fontSize: 28,
+        fontWeight: 600,
+        letterSpacing: "2px",
+        boxSizing: "border-box"
+      }}>
+        501
+      </div>
+      {/* 下方 1/10 ROUND */}
+      <div style={{
+        position: "fixed",
+        top: 40,
+        left: 0,
+        width: 160,
+        height: 20,
+        background: ROUND_GRAY,
+        color: "#AAAFB8",
+        display: "flex",
+        alignItems: "center",
+        fontSize: 16,
+        boxSizing: "border-box",
+        paddingLeft: 10,
+        paddingTop: 2,
+        paddingBottom: 2,
+        fontWeight: 500,
+        letterSpacing: "1.5px"
+      }}>
+        {round}/{TOTAL_ROUNDS} ROUND
+      </div>
+      {/* 歷史回合總分表 */}
+      <div style={{
+        position: "fixed",
+        top: 60 + 20,
+        left: 0,
+        marginTop: 20,
+        width: 200,
+        height: 120,
+        display: "flex",
+        flexDirection: "column",
+        boxSizing: "border-box"
+      }}>
+        {[...Array(HISTORY_ROWS)].map((_, idx) => {
+          // 表格每列
+          const i = HISTORY_ROWS - idx - 1;
+          const roundNum = (histories.length - i > 0) ? histories.length - i : "";
+          const scoreVal = (histories.length - i > 0) ? histories[i] : "";
+          const isHeader = false;
+          return (
+            <div
+              key={idx}
+              style={{
+                display: "flex",
+                flexDirection: "row",
+                width: 200,
+                height: 20,
+                background: idx % 2 === 0 ? "#25292A" : "#313335"
+              }}
+            >
+              {/* R# */}
+              <div style={{
+                width: 80,
+                textAlign: "right",
+                fontSize: 18,
+                color: "#BBBFCC",
+                paddingRight: 20,
+                paddingTop: 15,
+                paddingBottom: 15,
+                boxSizing: "border-box"
+              }}>
+                {roundNum ? `R${roundNum}` : ""}
+              </div>
+              {/* 分數 */}
+              <div style={{
+                width: 120,
+                textAlign: "right",
+                fontSize: 22,
+                color: "#fff",
+                paddingRight: 20,
+                paddingTop: 15,
+                paddingBottom: 15,
+                fontVariantNumeric: "tabular-nums",
+                boxSizing: "border-box"
+              }}>
+                {scoreVal !== "" ? scoreVal : ""}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* 右上角選單按鈕 */}
+      <div style={{
+        position: "fixed",
+        top: 15,
+        right: 15,
+        width: 40,
+        height: 40,
+        zIndex: 100
+      }}>
+        <div style={{
+          background: MENU_BTN_GRAY,
+          borderRadius: 8,
+          width: 40,
+          height: 40,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 2px 9px #0008"
+        }}>
+          {[0, 1, 2].map(i => (
+            <div key={i}
+              style={{
+                width: 26,
+                height: 4,
+                borderRadius: 2,
+                background: WHITE,
+                marginTop: i === 0 ? 0 : 6
+              }}>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* 三鏢分數區（選單下方） */}
+      <div style={{
+        position: "fixed",
+        top: 15 + 40 + 20, // 選單下20px
+        right: 15,
+        width: 140,
+        display: "flex",
+        flexDirection: "column",
+        gap: 15
+      }}>
+        {[0, 1, 2].map(i => (
+          <div key={i}
+            style={{
+              width: 140,
+              height: 30,
+              background: "#27282B",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 22,
+              borderRadius: 8,
+              opacity: roundThrows[i] !== undefined ? 1 : 0.48
+            }}
+          >
+            {roundThrows[i] ? `${roundThrows[i].longName}(${roundThrows[i].value})` : "-"}
+          </div>
+        ))}
+      </div>
+
+      {/* 畫面最下方灰色 bar */}
+      <div style={{
+        position: "fixed",
+        bottom: 0,
+        width: "100vw",
+        left: 0,
+        height: 100,
+        background: "#3A3A40",
+        zIndex: 20
+      }}></div>
+
+      {/* 中央分數大字 */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: 100, // 扣掉下方色塊
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10,
+          pointerEvents: "none"
+        }}
+      >
+        <span style={{
+          color: CURRENT_SCORE,
+          fontSize: 300,
+          fontWeight: 800,
+          lineHeight: "1.05",
+          textShadow: SCORE_SHADOW,
+          letterSpacing: "-0.1em",
+          textAlign: "center"
+        }}>
+          {score}
+        </span>
+      </div>
+
+      {/* 狀態區(連線/按鈕/紀錄版，防重覆顯示，這區左右邊距20px/位於中央靠上) */}
+      <div style={{
+        position: "fixed",
+        top: 170,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: 400,
+        maxWidth: "90vw",
+        minHeight: 120,
+        zIndex: 80,
+        userSelect: "none"
+      }}>
         {!granboard ? (
           <div style={{ marginBottom: "1em" }}>
-            <button onClick={handleConnect} disabled={connecting}>
+            <button onClick={handleConnect} disabled={connecting}
+              style={{
+                background: "#157DD7",
+                color: "#FFF",
+                fontSize: 22,
+                fontWeight: 600,
+                padding: "0.4em 2em",
+                border: "none",
+                borderRadius: 6,
+                boxShadow: "0 6px 30px #000a",
+                cursor: "pointer"
+              }}
+            >
               {connecting ? "連線中..." : "連接藍牙飛鏢板"}
             </button>
-            <div style={{ color: "red", marginTop: "0.5em" }}>
+            <div style={{ color: "red", marginTop: "0.5em", fontWeight: 600, fontSize: 18 }}>
               {error ?? "請點擊上方按鈕連接 Granboard 道具"}
             </div>
           </div>
         ) : (
-          <div style={{ color: "#4dd599", marginBottom: "1em" }}>已連線 Granboard！</div>
+          <div style={{ color: "#4dd599", marginBottom: "1em", fontWeight: 600, fontSize: 20 }}>已連線 Granboard！</div>
         )}
+
+        <div style={{ display: "flex", gap: 16, marginBottom: 12, marginTop: 8 }}>
+          <button onClick={handleEndRound}
+            style={{
+              background: "#888",
+              color: "#FFF",
+              fontSize: 18,
+              fontWeight: 500,
+              padding: "0.4em 1.1em",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer"
+            }}>
+            手動結束回合
+          </button>
+          <button onClick={handleResetGame}
+            style={{
+              background: "#dadbdb",
+              color: "#222",
+              fontSize: 18,
+              fontWeight: 500,
+              padding: "0.4em 1.1em",
+              border: "none",
+              borderRadius: 4,
+              cursor: "pointer"
+            }}>
+            重新開始
+          </button>
+        </div>
+        <div>
+          <h3 style={{ color: "#D9DFE6", fontWeight: 600, fontSize: 16, marginBottom: 4, marginTop: 0 }}>動作紀錄：</h3>
+          <ol style={{
+            fontSize: "1.1em",
+            background: "#212224",
+            padding: "1em",
+            borderRadius: 6,
+            maxHeight: 240,
+            overflowY: "auto",
+            minHeight: 40,
+            color: "#DDD"
+          }}>
+            {log.slice(0, 7).map((line, i) => <li key={i}>{line}</li>)}
+          </ol>
+        </div>
       </div>
-      <div>
-        本回合：{roundThrows.length === 0
-          ? "尚未投鏢"
-          : roundThrows.map((t, idx) => `${t.longName}(${t.value})`).join(", ")}（{roundThrows.length}/3）
-      </div>
-      <div style={{ margin: "1em 0" }}>
-        <button onClick={handleEndRound}>手動結束回合</button>
-        <button onClick={handleResetGame}>重新開始</button>
-      </div>
-      <h3>動作紀錄：</h3>
-      <ol>
-        {log.slice(0, 10).map((line, i) => <li key={i}>{line}</li>)}
-      </ol>
     </div>
   );
 }
