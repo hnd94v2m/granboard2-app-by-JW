@@ -73,7 +73,6 @@ export default function App() {
           `命中 ${segment.LongName}（分值${segment.Value}），剩餘：${nextScore}`,
           ...l
         ]);
-        // WIN or 回合結束
         if (nextScore === 0 || newThrows.length >= 3) {
           setHistories(h => {
             const roundTotal = score - nextScore;
@@ -96,7 +95,6 @@ export default function App() {
     return () => {
       granboard.segmentHitCallback = undefined;
     };
-    // eslint-disable-next-line
   }, [granboard, score, roundThrows, roundStartingScore]);
 
   const handleEndRound = () => {
@@ -148,7 +146,7 @@ export default function App() {
   const CURRENT_SCORE = "#D9DFE6";
   const SCORE_SHADOW = "0 4px 24px #000a, 0 8px 40px #4444";
 
-  // 分數「中間大字」每個字都分開排版
+  // 分數每字分開
   const scoreStr = String(score).split("");
 
   return (
@@ -268,7 +266,6 @@ export default function App() {
         <div style={{
           width: 200,
           position: "relative",
-          // 距最下方灰色 bar 上面靠攏
           bottom: 0
         }}>
           <h3 style={{
@@ -330,7 +327,7 @@ export default function App() {
       {/* 三鏢分數區（選單下方） */}
       <div style={{
         position: "fixed",
-        top: 15 + 40 + 20,
+        top: 75,
         right: 15,
         width: 140,
         display: "flex",
@@ -374,7 +371,7 @@ export default function App() {
       <div style={{
         position: "fixed",
         right: 32,
-        bottom: 100 + 36, // 灰色bar上方 + 控制區高度
+        bottom: 136,
         width: 350,
         minWidth: 250,
         zIndex: 60,
@@ -389,7 +386,7 @@ export default function App() {
           alignItems: "flex-end",
           gap: 14
         }}>
-          <button onClick={handleConnect} disabled={granboard || connecting}
+          <button onClick={handleConnect} disabled={!!granboard || connecting}
             style={{
               background: "#157DD7",
               color: "#FFF",
@@ -454,7 +451,7 @@ export default function App() {
           left: 0,
           top: 0,
           right: 0,
-          bottom: 100, // 扣掉下方色塊
+          bottom: 100,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -465,7 +462,7 @@ export default function App() {
         <div style={{
           display: "flex",
           flexDirection: "row",
-          gap: 50, // 數字間隔 50px
+          gap: 50,
           alignItems: "center",
           justifyContent: "center"
         }}>
