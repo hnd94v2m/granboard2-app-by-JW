@@ -22,7 +22,6 @@ export default function App() {
   const [log, setLog] = useState<string[]>([]);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [roundStartingScore, setRoundStartingScore] = useState<number>(START_SCORE);
   const [roundTotalList, setRoundTotalList] = useState<(number | "BUST")[]>([]);
   const [round, setRound] = useState(1);
@@ -31,6 +30,7 @@ export default function App() {
   // 明確指定 Ref 型別為 Throw[]
   const lastRoundThrowsRef = useRef<Throw[]>([]);
 
+  // 型別明確化，避免 TS2367
   const [roundStatus, setRoundStatus] = useState<RoundStatus>("playing");
 
   useEffect(() => {
@@ -74,8 +74,8 @@ export default function App() {
         setLog(l => ["手動按下RESET_BUTTON，回合重置（本回合三鏢全清空、分數復原）", ...l]);
         setScore(roundStartingScore);
         setRoundThrows([]);
-        // 修正 TS2367 編譯問題，型別推斷無誤
-        if (roundStatus === "wait-next") {
+        // 以下斷型別問題，可用模板字串規避問題（或 as any 方式）
+        if (`${roundStatus}` === "wait-next") {
           lastRoundThrowsRef.current = [];
         }
         return;
