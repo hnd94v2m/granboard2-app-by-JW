@@ -10,6 +10,7 @@ type Throw = {
   value: number;
   longName: string;
   segmentType: SegmentType;
+  id: SegmentID;
 };
 
 export default function App() {
@@ -42,15 +43,33 @@ export default function App() {
         return;
       }
 
-      let nextScore = score - segment.Value;
+      // fat bull: 任何 bull 訊號都算 50 分
+      let segType = segment.Type;
+      let segValue = segment.Value;
+      let segId = segment.ID;
+      if (segId === SegmentID.BULL || segId === SegmentID.DBL_BULL) {
+        segValue = 50;
+        segType = SegmentType.Other;
+      }
+
+      let nextScore = score - segValue;
+
+      // Master out 規則
+      const isMasterOut =
+        segType === SegmentType.Double ||
+        segType === SegmentType.Triple ||
+        segId === SegmentID.BULL ||
+        segId === SegmentID.DBL_BULL;
 
       if (
         nextScore < 0 ||
         nextScore === 1 ||
-        (nextScore === 0 && segment.Type !== SegmentType.Double)
+        (nextScore === 0 && !isMasterOut)
       ) {
         setLog(l => [
-          `爆鏢 BUST！（本回合所有分數作廢，分數回到${roundStartingScore}）`,
+          nextScore === 0 && !isMasterOut
+            ? "爆鏢 BUST！（須於雙倍、三倍、紅心結標，本回合分數作廢，分數回到" + roundStartingScore + "）"
+            : `爆鏢 BUST！（本回合所有分數作廢，分數回到${roundStartingScore}）`,
           ...l
         ]);
         setScore(roundStartingScore);
@@ -64,13 +83,14 @@ export default function App() {
         const newThrows = [
           ...t,
           {
-            value: segment.Value,
+            value: segValue,
             longName: segment.LongName,
-            segmentType: segment.Type,
+            segmentType: segType,
+            id: segId,
           }
         ];
         setLog(l => [
-          `命中 ${segment.LongName}（分值${segment.Value}），剩餘：${nextScore}`,
+          `命中 ${segment.LongName}（分值${segValue}），剩餘：${nextScore}`,
           ...l
         ]);
         if (nextScore === 0 || newThrows.length >= 3) {
@@ -83,7 +103,7 @@ export default function App() {
           setRound(r => Math.min(r + 1, TOTAL_ROUNDS));
           setLog(l => [
             nextScore === 0
-              ? "恭喜結束遊戲！（最後一鏢必須雙倍區）"
+              ? "恭喜結束遊戲！（最後一鏢必須雙倍、三倍或紅心區）"
               : "本回合結束（3鏢）",
             ...l
           ]);
@@ -136,7 +156,7 @@ export default function App() {
     }
   };
 
-  // 色系設定
+  // 色系
   const RED = "#C62F33";
   const BANNER_RED = "#DE5459";
   const ROUND_GRAY = "#252525";
@@ -144,9 +164,8 @@ export default function App() {
   const MENU_BTN_GRAY = "#353535";
   const WHITE = "#FAF3E8";
   const CURRENT_SCORE = "#D9DFE6";
-  const SCORE_SHADOW = "0 4px 24px #000a, 0 8px 40px #4444";
+  const SCORE_SHADOW = "0 4px 48px #000a, 0 8px 80px #4444, 0 1.5vw 5vw #0007";
 
-  // 分數每字分開
   const scoreStr = String(score).split("");
 
   return (
@@ -154,197 +173,186 @@ export default function App() {
       style={{
         background: BG_DARK,
         minHeight: "100vh",
+        width: "100vw",
         position: "relative",
         margin: 0,
         padding: 0,
-        boxSizing: "border-box",
         fontFamily: "sans-serif",
-        width: "100vw",
+        boxSizing: "border-box",
         overflowX: "hidden"
       }}
     >
-      {/* 左上角 501 比賽名稱 */}
-      <div style={{
+      {/* 上方左列 */}
+      <section style={{
         position: "fixed",
-        top: 0,
-        left: 0,
-        width: 160,
-        height: 40,
-        background: BANNER_RED,
-        display: "flex",
-        alignItems: "center",
-        paddingLeft: 10,
-        paddingTop: 5,
-        paddingBottom: 5,
-        zIndex: 20,
-        color: "#fff",
-        fontSize: 28,
-        fontWeight: 600,
-        letterSpacing: "2px",
-        boxSizing: "border-box"
-      }}>
-        501
-      </div>
-      {/* 下方 ROUND */}
-      <div style={{
-        position: "fixed",
-        top: 40,
-        left: 0,
-        width: 160,
-        height: 20,
-        background: ROUND_GRAY,
-        color: "#AAAFB8",
-        display: "flex",
-        alignItems: "center",
-        fontSize: 16,
-        boxSizing: "border-box",
-        paddingLeft: 10,
-        paddingTop: 2,
-        paddingBottom: 2,
-        fontWeight: 500,
-        letterSpacing: "1.5px"
-      }}>
-        {round}/{TOTAL_ROUNDS} ROUND
-      </div>
-      {/* 歷史回合總分表 */}
-      <div style={{
-        position: "fixed",
-        top: 60 + 20,
-        left: 0,
-        marginTop: 20,
-        width: 200,
-        height: 120,
+        top: 0, left: 0,
+        zIndex: 30,
         display: "flex",
         flexDirection: "column",
-        boxSizing: "border-box"
+        alignItems: "flex-start",
+        gap: 0
       }}>
-        {[...Array(HISTORY_ROWS)].map((_, idx) => {
-          const i = HISTORY_ROWS - idx - 1;
-          const roundNum = (histories.length - i > 0) ? histories.length - i : "";
-          const scoreVal = (histories.length - i > 0) ? histories[i] : "";
-          return (
-            <div
-              key={idx}
-              style={{
-                display: "flex",
-                flexDirection: "row",
-                width: 200,
-                height: 20,
-                background: idx % 2 === 0 ? "#25292A" : "#313335"
-              }}
-            >
-              <div style={{
-                width: 80,
-                textAlign: "right",
-                fontSize: 18,
-                color: "#BBBFCC",
-                paddingRight: 20,
-                paddingTop: 15,
-                paddingBottom: 15,
-                boxSizing: "border-box"
-              }}>
-                {roundNum ? `R${roundNum}` : ""}
-              </div>
-              <div style={{
-                width: 120,
-                textAlign: "right",
-                fontSize: 22,
-                color: "#fff",
-                paddingRight: 20,
-                paddingTop: 15,
-                paddingBottom: 15,
-                fontVariantNumeric: "tabular-nums",
-                boxSizing: "border-box"
-              }}>
-                {scoreVal !== "" ? scoreVal : ""}
-              </div>
-            </div>
-          )
-        })}
-        {/* 動作紀錄（此處加 20px 空隙） */}
-        <div style={{ height: 20 }}></div>
         <div style={{
-          width: 200,
-          position: "relative",
-          bottom: 0
+          width: "min(17vw,160px)",
+          height: "min(5vw,40px)",
+          background: BANNER_RED,
+          display: "flex",
+          alignItems: "center",
+          paddingLeft: "1vw",
+          paddingTop: "0.5vw",
+          paddingBottom: "0.5vw",
+          color: "#fff",
+          fontSize: "clamp(1.3rem,3vw,2rem)",
+          fontWeight: 600,
+          letterSpacing: "2px",
+          boxSizing: "border-box"
         }}>
-          <h3 style={{
-            color: "#D9DFE6",
-            fontWeight: 600,
-            fontSize: 16,
-            marginBottom: 4,
-            marginTop: 0
-          }}>動作紀錄：</h3>
-          <ol style={{
-            fontSize: "1.1em",
-            background: "#212224",
-            padding: "1em",
-            borderRadius: 6,
-            maxHeight: 110,
-            overflowY: "auto",
-            minHeight: 36,
-            color: "#DDD",
-            marginBottom: 0
-          }}>
-            {log.slice(0, 7).map((line, i) => <li key={i}>{line}</li>)}
-          </ol>
+          501
         </div>
-      </div>
+        <div style={{
+          width: "min(17vw,160px)",
+          height: "min(3vw,20px)",
+          background: ROUND_GRAY,
+          color: "#AAAFB8",
+          display: "flex",
+          alignItems: "center",
+          fontSize: "clamp(1.05rem,2vw,1.2rem)",
+          paddingLeft: "1vw",
+          paddingTop: "0.25vw",
+          paddingBottom: "0.25vw",
+          fontWeight: 500,
+          letterSpacing: "1.5px"
+        }}>
+          {round}/{TOTAL_ROUNDS} ROUND
+        </div>
+        <div style={{ height: "min(3vw,20px)" }}></div>
+        {/* 歷史分數 + 動作紀錄區 */}
+        <div style={{
+          width: "min(19vw,200px)",
+          minWidth: 135,
+          height: "min(12vw,120px)",
+          display: "flex",
+          flexDirection: "column"
+        }}>
+          {[...Array(HISTORY_ROWS)].map((_, idx) => {
+            const i = HISTORY_ROWS - idx - 1;
+            const roundNum = (histories.length - i > 0) ? histories.length - i : "";
+            const scoreVal = (histories.length - i > 0) ? histories[i] : "";
+            return (
+              <div
+                key={idx}
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  width: "100%",
+                  background: idx % 2 === 0 ? "#25292A" : "#313335",
+                  height: "16.5%",
+                  alignItems: "center"
+                }}
+              >
+                <div style={{
+                  width: "40%",
+                  textAlign: "right",
+                  fontSize: "clamp(1.01rem,1.9vw,1.2rem)",
+                  color: "#BBBFCC",
+                  paddingRight: "min(2vw,20px)",
+                  paddingTop: "0.7vw",
+                  paddingBottom: "0.7vw",
+                  boxSizing: "border-box"
+                }}>
+                  {roundNum ? `R${roundNum}` : ""}
+                </div>
+                <div style={{
+                  width: "60%",
+                  textAlign: "right",
+                  fontSize: "clamp(1.2rem,2vw,1.38rem)",
+                  color: "#fff",
+                  paddingRight: "min(2vw,20px)",
+                  fontVariantNumeric: "tabular-nums",
+                  paddingTop: "0.7vw",
+                  paddingBottom: "0.7vw",
+                  boxSizing: "border-box"
+                }}>
+                  {scoreVal !== "" ? scoreVal : ""}
+                </div>
+              </div>
+            )
+          })}
+          {/* 動作紀錄 */}
+          <div style={{ height: "min(2vw,20px)" }}></div>
+          <div>
+            <h3 style={{
+              color: "#D9DFE6",
+              fontWeight: 600,
+              fontSize: "clamp(1.1rem,1.4vw,1.18rem)",
+              marginBottom: 4,
+              marginTop: 0
+            }}>動作紀錄：</h3>
+            <ol style={{
+              fontSize: "clamp(0.95rem,1.14vw,1.07rem)",
+              background: "#212224",
+              padding: "0.7em",
+              borderRadius: 6,
+              maxHeight: "10vw",
+              overflowY: "auto",
+              minHeight: 36,
+              color: "#DDD",
+              marginBottom: 0,
+              width: "min(19vw,200px)"
+            }}>
+              {log.slice(0, 7).map((line, i) => <li key={i}>{line}</li>)}
+            </ol>
+          </div>
+        </div>
+      </section>
 
-      {/* 右上角選單按鈕 */}
+      {/* 右上角選單 */}
       <div style={{
         position: "fixed",
-        top: 15,
-        right: 15,
-        width: 40,
-        height: 40,
+        top: "min(15px,1.8vw)",
+        right: "min(15px,2vw)",
+        width: "min(40px,4vw)", height: "min(40px,4vw)",
         zIndex: 100
       }}>
         <div style={{
           background: MENU_BTN_GRAY,
           borderRadius: 8,
-          width: 40,
-          height: 40,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
+          width: "100%", height: "100%",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           boxShadow: "0 2px 9px #0008"
         }}>
           {[0, 1, 2].map(i => (
             <div key={i}
               style={{
-                width: 26,
-                height: 4,
+                width: "65%", height: "13%",
                 borderRadius: 2,
                 background: WHITE,
-                marginTop: i === 0 ? 0 : 6
+                marginTop: i === 0 ? 0 : "15%"
               }}>
             </div>
           ))}
         </div>
       </div>
-      {/* 三鏢分數區（選單下方） */}
+      {/* 右側三鏢分數區 */}
       <div style={{
         position: "fixed",
-        top: 75,
-        right: 15,
-        width: 140,
-        display: "flex",
-        flexDirection: "column",
-        gap: 15
+        top: "calc(min(15px,1.8vw) + min(40px,4vw) + min(20px,2vw))",
+        right: "min(15px,2vw)",
+        width: "min(140px,13vw)",
+        display: "flex", flexDirection: "column",
+        gap: "min(16px,1.8vw)"
       }}>
         {[0, 1, 2].map(i => (
           <div key={i}
             style={{
-              width: 140,
-              height: 30,
+              width: "100%",
+              height: "clamp(24px,2.9vw,30px)",
               background: "#27282B",
               color: "#fff",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 22,
+              fontSize: "clamp(1.1rem,1.9vw,1.28rem)",
               borderRadius: 8,
               opacity: roundThrows[i] !== undefined ? 1 : 0.48
             }}
@@ -362,35 +370,35 @@ export default function App() {
         bottom: 0,
         width: "100vw",
         left: 0,
-        height: 100,
+        height: "clamp(80px,9vw,100px)",
         background: "#3A3A40",
         zIndex: 20
       }}></div>
 
-      {/* 右下角控制按鈕區 */}
+      {/* 右下角控制區 */}
       <div style={{
         position: "fixed",
-        right: 32,
-        bottom: 136,
-        width: 350,
-        minWidth: 250,
+        right: "min(32px,3vw)",
+        bottom: "clamp(96px,11vw,136px)",
+        width: "min(350px,38vw)",
+        minWidth: 150,
         zIndex: 60,
         display: "flex",
         flexDirection: "column",
         alignItems: "flex-end",
-        gap: 18
+        gap: "min(18px,2vw)"
       }}>
         <div style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
-          gap: 14
+          gap: "min(14px,1.6vw)"
         }}>
           <button onClick={handleConnect} disabled={!!granboard || connecting}
             style={{
               background: "#157DD7",
               color: "#FFF",
-              fontSize: 22,
+              fontSize: "clamp(1.2rem,1.88vw,1.45rem)",
               fontWeight: 600,
               padding: "0.35em 2em",
               border: "none",
@@ -408,7 +416,7 @@ export default function App() {
             style={{
               background: "#888",
               color: "#FFF",
-              fontSize: 18,
+              fontSize: "clamp(1.02rem,1.56vw,1.25rem)",
               fontWeight: 500,
               padding: "0.38em 1.4em",
               border: "none",
@@ -421,7 +429,7 @@ export default function App() {
             style={{
               background: "#dadbdb",
               color: "#222",
-              fontSize: 18,
+              fontSize: "clamp(1.02rem,1.56vw,1.25rem)",
               fontWeight: 500,
               padding: "0.38em 1.4em",
               border: "none",
@@ -435,7 +443,7 @@ export default function App() {
           <div style={{
             color: "red",
             fontWeight: 600,
-            fontSize: 18,
+            fontSize: "clamp(1.11rem,1.58vw,1.21rem)",
             marginTop: 5,
             marginRight: 2
           }}>
@@ -444,14 +452,14 @@ export default function App() {
         )}
       </div>
 
-      {/* 分數大字置中，每個數字有間距 */}
+      {/* 分數大字置中，RWD vw 單位，每個字 flex-row 有空隙 */}
       <div
         style={{
           position: "absolute",
           left: 0,
-          top: 0,
           right: 0,
-          bottom: 100,
+          top: 0,
+          bottom: "clamp(80px,9vw,100px)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -462,7 +470,7 @@ export default function App() {
         <div style={{
           display: "flex",
           flexDirection: "row",
-          gap: 50,
+          gap: "clamp(38px,4vw,50px)",
           alignItems: "center",
           justifyContent: "center"
         }}>
@@ -470,11 +478,11 @@ export default function App() {
             <span key={idx}
               style={{
                 color: CURRENT_SCORE,
-                fontSize: 500,
+                fontSize: "clamp(130px,28vw,500px)",
                 fontWeight: 800,
-                lineHeight: "1.05",
+                lineHeight: 1,
                 textShadow: SCORE_SHADOW,
-                letterSpacing: "-0.1em",
+                letterSpacing: "-0.09em",
                 textAlign: "center",
                 fontFamily: "inherit"
               }}>
@@ -483,6 +491,28 @@ export default function App() {
           ))}
         </div>
       </div>
+
+      {/* media query 的 RWD style（針對手機直式） */}
+      <style>
+        {`
+        @media (max-width: 600px) {
+          div[style*="minHeight: 100vh"] {
+            font-size: 14px !important;
+          }
+          div[style*="分數大字置中"] span {
+            font-size: 18vw !important;
+          }
+          section {
+            width: 98vw !important;
+            min-width: 0 !important;
+          }
+          div[style*="minWidth: 135"] {
+            width: 96vw !important;
+            min-width: 0 !important;
+          }
+        }
+      `}
+      </style>
     </div>
   );
 }
