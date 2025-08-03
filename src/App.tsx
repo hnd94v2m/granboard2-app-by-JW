@@ -54,7 +54,7 @@ export default function App() {
 
       let nextScore = score - segValue;
 
-      // Master out 規則
+      // Master out 判斷
       const isMasterOut =
         segType === SegmentType.Double ||
         segType === SegmentType.Triple ||
