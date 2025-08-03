@@ -20,6 +20,7 @@ export default function App() {
   const [log, setLog] = useState<string[]>([]);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 關鍵：即時記住「本回合開始」的起始分數
   const [roundStartingScore, setRoundStartingScore] = useState<number>(START_SCORE);
   const [histories, setHistories] = useState<number[]>([]);
   const [round, setRound] = useState(1);
@@ -34,6 +35,7 @@ export default function App() {
     if (!granboard) return;
 
     granboard.segmentHitCallback = (segment) => {
+      // 回合第一鏢時設該回合起始分數
       if (roundThrows.length === 0) setRoundStartingScore(score);
 
       if (segment.ID === SegmentID.RESET_BUTTON) {
@@ -54,13 +56,14 @@ export default function App() {
 
       let nextScore = score - segValue;
 
-      // Master out 判斷
+      // master out 判斷
       const isMasterOut =
         segType === SegmentType.Double ||
         segType === SegmentType.Triple ||
         segId === SegmentID.BULL ||
         segId === SegmentID.DBL_BULL;
 
+      // BUST 條件（在這裡 nextScore 0 但非合法 master out 不算結標）
       if (
         nextScore < 0 ||
         nextScore === 1 ||
@@ -93,6 +96,7 @@ export default function App() {
           `命中 ${segment.LongName}（分值${segValue}），剩餘：${nextScore}`,
           ...l
         ]);
+        // 回合自動結束（出3鏢或分數清零），此時必須更新 roundStartingScore
         if (nextScore === 0 || newThrows.length >= 3) {
           setHistories(h => {
             const roundTotal = score - nextScore;
@@ -107,6 +111,8 @@ export default function App() {
               : "本回合結束（3鏢）",
             ...l
           ]);
+          // 關鍵：自動回合結束時同步更新下回合起始分數為現在分數
+          setRoundStartingScore(nextScore);
           setTimeout(() => setRoundThrows([]), 400);
         }
         return newThrows;
@@ -115,8 +121,10 @@ export default function App() {
     return () => {
       granboard.segmentHitCallback = undefined;
     };
+    // eslint-disable-next-line
   }, [granboard, score, roundThrows, roundStartingScore]);
 
+  // 手動結束回合時也要即時寫入當下分數做為新回合起點
   const handleEndRound = () => {
     if (roundThrows.length > 0) {
       setHistories(h => {
@@ -129,7 +137,7 @@ export default function App() {
     }
     setLog(l => [`手動結束回合`, ...l]);
     setRoundThrows([]);
-    setRoundStartingScore(score);
+    setRoundStartingScore(score); // 重點：刷新回合起始分數
   };
 
   const handleResetGame = () => {
