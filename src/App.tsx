@@ -23,11 +23,11 @@ export default function App() {
 
   // 本回合起始分數
   const [roundStartingScore, setRoundStartingScore] = useState<number>(START_SCORE);
-  // 歷史每回合三鏢加總
-  const [roundTotalList, setRoundTotalList] = useState<number[]>([]);
+  // 歷史每回合三鏢加總或 BUST 字串 (number | 'BUST')
+  const [roundTotalList, setRoundTotalList] = useState<(number | "BUST")[]>([]);
   // 回合數（第 N 回合）
   const [round, setRound] = useState(1);
-  // 用於呼吸動畫tick
+  // 用於呼吸動畫 tick
   const [animTick, setAnimTick] = useState(0);
 
   // 呼吸動畫定時器
@@ -72,11 +72,12 @@ export default function App() {
         segId === SegmentID.BULL ||
         segId === SegmentID.DBL_BULL;
 
-      if (
+      const isBust =
         nextScore < 0 ||
         nextScore === 1 ||
-        (nextScore === 0 && !isMasterOut)
-      ) {
+        (nextScore === 0 && !isMasterOut);
+
+      if (isBust) {
         setLog(l => [
           nextScore === 0 && !isMasterOut
             ? "爆鏢 BUST！（須於雙倍、三倍、紅心結標，本回合分數作廢，分數回到" + roundStartingScore + "）"
@@ -84,8 +85,12 @@ export default function App() {
           ...l
         ]);
         setScore(roundStartingScore);
+        // BUST 當回合紀錄為 "BUST"
+        setRoundTotalList(list => [...list, "BUST"]);
+        setRound(r => r + 1);
         setTimeout(() => setRoundThrows([]), 400);
         setRoundThrows([]);
+        setRoundStartingScore(roundStartingScore); // BUST後回合起始分數不變
         return;
       }
 
@@ -166,10 +171,10 @@ export default function App() {
     }
   };
 
-  // 產生歷史回合表格內容 (左欄：R#、右欄：該回合加總分數或預設橫線)
+  // 產生歷史回合表格內容 (左欄：R#、右欄：該回合加總分數或預設橫線或"BUST")
   function generateHistoryTable() {
     const rows = [];
-    let offset = round > 4 ? round - 4 : 0; // 5回合後往上卷
+    let offset = round > 4 ? round - 4 : 0; // 5回合後往上滑動
     for (let i = 0; i < TABLE_ROWS; i++) {
       const roundNum = offset + i + 1;
       let showR = roundNum <= TOTAL_ROUNDS ? `R${roundNum}` : "";
@@ -178,10 +183,10 @@ export default function App() {
         showScore = roundTotalList[offset + i];
       }
       if (roundNum > round || roundNum > TOTAL_ROUNDS) {
+        // 超過當前回合或總回合數，不顯示
         showScore = "";
         showR = "";
       }
-      // 根據第幾排匹配色塊、字色後面處理
       rows.push({ roundNum: showR, score: showScore });
     }
 
@@ -193,19 +198,32 @@ export default function App() {
     return rows;
   }
 
-  // 歷史表色塊與字色規則
-  const BG_COL_1 = ["#EEEEF1","#EEEEF1","#EEEEF1","#EEEEF1","#bdbcc2","#29292C"];
-  const BG_COL_2 = ["#bdbcc2","#bdbcc2","#bdbcc2","#bdbcc2","#29292C","#181818"];
-  const TXT_COLS = ["#fff","#fff","#fff","#fff","#FAF3E8","#A7A7A6"];
+  // 歷史表色塊與字色規則（根據需求，第1欄前4列與第5列底色加深）
+  const BG_COL_1 = [
+    "#c8c9cd", // 前4列加深淺灰
+    "#c8c9cd",
+    "#c8c9cd",
+    "#c8c9cd",
+    "#8a8a8e", // 第5列灰色
+    "#29292C", // 第6列深灰
+  ];
+  const BG_COL_2 = [
+    "#bdbcc2", // 對應第1欄第5列底色
+    "#bdbcc2",
+    "#bdbcc2",
+    "#bdbcc2",
+    "#29292C", // 對應第1欄第6列底色
+    "#181818", // 黑色背景
+  ];
+  const TXT_COLS = [
+    "#fff", "#fff", "#fff", "#fff", "#FAF3E8", "#A7A7A6"
+  ];
 
-  // 呼吸動畫焦點位置 第1-4回合highlight對應第1-4列，>=5 一直在第四列提示
+  // 呼吸動畫焦點位置 第1-4回合highlight對應第1-4列，>=5一直在第四列提示
   const focusRowIdx = round <= 4 ? round - 1 : round <= TOTAL_ROUNDS ? 3 : null;
-  const breathingStyle = {
-    animation: "breathe 1.2s infinite linear alternate"
-  };
 
-  const historyRows = generateHistoryTable();
   const scoreStr = String(score).split("");
+  const historyRows = generateHistoryTable();
 
   return (
     <div style={{
@@ -228,7 +246,8 @@ export default function App() {
         display: "flex",
         flexDirection: "column",
         alignItems: "flex-start",
-        gap: 0
+        gap: 0,
+        userSelect: "none"
       }}>
         {/* 501比賽標題 */}
         <div style={{
@@ -275,16 +294,20 @@ export default function App() {
           borderRadius: 11,
           overflow: "hidden",
           boxShadow: "0 4px 28px #0008",
-          userSelect: "none"
         }}>
           {historyRows.map((item, idx) => {
             const isFocus = focusRowIdx === idx;
             // 左欄底色字色
-            const leftBg = isFocus ? "#FAF3E8" : BG_COL_1[idx];
-            const leftColor = isFocus ? "#222" : TXT_COLS[idx];
-            // 右欄底色字色
-            const rightBg = BG_COL_2[idx];
-            const rightColor = TXT_COLS[idx];
+            let leftBg = BG_COL_1[idx];
+            let leftColor = TXT_COLS[idx];
+            let rightBg = BG_COL_2[idx];
+            let rightColor = TXT_COLS[idx];
+
+            // 呼吸動畫聚焦底色/字色反轉
+            if (isFocus) {
+              leftBg = "#FAF3E8";
+              leftColor = "#222";
+            }
 
             return (
               <React.Fragment key={idx}>
@@ -302,6 +325,7 @@ export default function App() {
                     animation: isFocus ? "breathe 1.2s infinite linear alternate" : undefined,
                     borderTopLeftRadius: idx === 0 ? 11 : undefined,
                     borderBottomLeftRadius: (idx === historyRows.length - 1) ? 11 : undefined,
+                    userSelect: "none"
                   }}>
                   {item.roundNum || (idx < 4 ? "-" : "")}
                 </div>
@@ -319,6 +343,7 @@ export default function App() {
                     paddingRight: "min(2vw,20px)",
                     borderTopRightRadius: idx === 0 ? 11 : undefined,
                     borderBottomRightRadius: (idx === historyRows.length - 1) ? 11 : undefined,
+                    userSelect: "none"
                   }}
                 >
                   {item.score !== "" ? item.score : (idx < 4 ? "-" : "")}
@@ -335,7 +360,8 @@ export default function App() {
             fontWeight: 600,
             fontSize: "clamp(1.1rem,1.4vw,1.18rem)",
             marginBottom: 4,
-            marginTop: 0
+            marginTop: 0,
+            userSelect: "none"
           }}>動作紀錄：</h3>
           <ol style={{
             fontSize: "clamp(0.95rem,1.14vw,1.07rem)",
@@ -361,7 +387,8 @@ export default function App() {
         right: "min(15px,2vw)",
         width: "min(40px,4vw)",
         height: "min(40px,4vw)",
-        zIndex: 100
+        zIndex: 100,
+        userSelect: "none"
       }}>
         <div style={{
           background: "#353535",
@@ -372,8 +399,7 @@ export default function App() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          boxShadow: "0 2px 9px #0008",
-          userSelect: "none"
+          boxShadow: "0 2px 9px #0008"
         }}>
           {[0, 1, 2].map(i => (
             <div key={i}
@@ -397,7 +423,8 @@ export default function App() {
         width: "min(140px,13vw)",
         display: "flex",
         flexDirection: "column",
-        gap: "min(16px,1.8vw)"
+        gap: "min(16px,1.8vw)",
+        userSelect: "none"
       }}>
         {[0, 1, 2].map(i => (
           <div key={i}
@@ -412,7 +439,6 @@ export default function App() {
               fontSize: "clamp(1.1rem,1.9vw,1.28rem)",
               borderRadius: 8,
               opacity: roundThrows[i] !== undefined ? 1 : 0.48,
-              userSelect: "none"
             }}
           >
             {roundThrows[i]
@@ -597,8 +623,8 @@ export default function App() {
             gap: 12px !important;
           }
           div[style*="position: fixed"][style*="top"][style*="right"] > div {
-           flex:1;
-           height: 36px !important;
+            flex: 1;
+            height: 36px !important;
           }
         }
       `}</style>
