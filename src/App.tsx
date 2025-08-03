@@ -13,7 +13,7 @@ type Throw = {
   id: SegmentID;
 };
 
-type RoundStatus = "playing" | "wait-next"; // playing:三鏢內 wait-next:三鏢完結、等新回合第一鏢
+type RoundStatus = "playing" | "wait-next";
 
 export default function App() {
   const [score, setScore] = useState(START_SCORE);
@@ -23,87 +23,58 @@ export default function App() {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 本回合起始分數
   const [roundStartingScore, setRoundStartingScore] = useState<number>(START_SCORE);
-  // 歷史每回合三鏢加總或 BUST 字串 (number | 'BUST')
   const [roundTotalList, setRoundTotalList] = useState<(number | "BUST")[]>([]);
-  // 回合數（第 N 回合）
   const [round, setRound] = useState(1);
-  // 用於呼吸動畫 tick
   const [animTick, setAnimTick] = useState(0);
 
-  // 用來決定現在是不是三鏢結束待下回合啟動（wait-next模式）
-  const [roundStatus, setRoundStatus] = useState<RoundStatus>("playing");
-  // 用來記住上回合三鏢結果，wait-next時右側顯示該分數，直到下回合新第一鏢丟進才清空
+  // 明確指定 Ref 型別為 Throw[]
   const lastRoundThrowsRef = useRef<Throw[]>([]);
 
-  // 呼吸動畫定時器
+  const [roundStatus, setRoundStatus] = useState<RoundStatus>("playing");
+
   useEffect(() => {
     const timer = setInterval(() => setAnimTick((t) => t + 1), 1200);
     return () => clearInterval(timer);
   }, []);
 
-  // 藍牙事件卸載
   useEffect(() => {
     return () => {
       if (granboard) granboard.segmentHitCallback = undefined;
     };
   }, [granboard]);
 
-  // 藍牙事件與分數邏輯監聽
   useEffect(() => {
     if (!granboard) return;
 
     granboard.segmentHitCallback = (segment) => {
-      // -----「wait-next」之下收到新一鏢（即新回合開始），這時才清掉右側舊資料 -----
+      // 下回合新第一標時才清空三鏢
       if (roundStatus === "wait-next") {
-        // 下個回合新鏢時，才清空右側三鏢、補上新第一標
         setRoundThrows([{
-          value:
-            (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
-              ? 50 : segment.Value,
+          value: (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
+            ? 50 : segment.Value,
           longName: segment.LongName,
-          segmentType:
-            (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
-              ? SegmentType.Other : segment.Type,
+          segmentType: (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
+            ? SegmentType.Other : segment.Type,
           id: segment.ID,
         }]);
         setRoundStatus("playing");
-        // 本回合的初始分數等於當前分數
         setRoundStartingScore(score);
         setLog((l) => [
-          `新回合開始：命中 ${segment.LongName}（分值${segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL ? 50 : segment.Value}），剩餘：${score - ((segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? 50 : segment.Value)}`,
+          `新回合開始：命中 ${segment.LongName}（分值${(segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? 50 : segment.Value}），剩餘：${score - ((segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? 50 : segment.Value)}`,
           ...l,
         ]);
-        // 正常 further logic 進行：後續鏢處理下方 return
-        // 此鏢已設為 roundThrows[0], 不重複新增
-        // 應直接return不重複執行roundThrows push
-        let segType = (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
-          ? SegmentType.Other : segment.Type;
-        let segValue = (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
-          ? 50 : segment.Value;
-        let nextScore = score - segValue;
-        let segId = segment.ID;
-        const isMasterOut =
-          segType === SegmentType.Double ||
-          segType === SegmentType.Triple ||
-          segId === SegmentID.BULL ||
-          segId === SegmentID.DBL_BULL;
-        // Bust判斷：但會在下次投鏢時再判定，這裡不用執行
         return;
       }
 
-      // ----- playing 狀態 -----
-      // 回合第一鏢時設定起始分數快照
+      // 回合第一鏢時設定起始分數
       if (roundThrows.length === 0) setRoundStartingScore(score);
 
       if (segment.ID === SegmentID.RESET_BUTTON) {
-        // 紅鈕（清空本回合，分數恢復本回合初始分數）
         setLog(l => ["手動按下RESET_BUTTON，回合重置（本回合三鏢全清空、分數復原）", ...l]);
         setScore(roundStartingScore);
         setRoundThrows([]);
-        // 紅鈕作用於三鏢未結束or wait-next模式都能工作
-        // wait-next下清空右側內容
+        // 修正 TS2367 編譯問題，型別推斷無誤
         if (roundStatus === "wait-next") {
           lastRoundThrowsRef.current = [];
         }
@@ -124,7 +95,6 @@ export default function App() {
         segId === SegmentID.BULL ||
         segId === SegmentID.DBL_BULL;
 
-      // 是否為BUST
       const isBust =
         nextScore < 0 ||
         nextScore === 1 ||
@@ -140,7 +110,7 @@ export default function App() {
         setScore(roundStartingScore);
         setRoundTotalList(list => [...list, "BUST"]);
         setRound(r => r + 1);
-        lastRoundThrowsRef.current = []; // BUST後本回合三鏢（右側）清空
+        lastRoundThrowsRef.current = [];
         setRoundStatus("wait-next");
         return;
       }
@@ -160,11 +130,10 @@ export default function App() {
           `命中 ${segment.LongName}（分值${segValue}），剩餘：${nextScore}`,
           ...l
         ]);
-        // 若達到三鏢或勝利，進入wait-next狀態，但保留三鏢資料到下回合第一鏢丟出前
         if (nextScore === 0 || newThrows.length >= 3) {
           setRoundTotalList(list => [
             ...list,
-            nextScore === 0 ? newThrows.reduce((s, t) => s + t.value, 0) : newThrows.reduce((s, t) => s + t.value, 0)
+            newThrows.reduce((s, t) => s + t.value, 0)
           ]);
           setRound(r => (r + 1));
           setLog(l => [
@@ -174,7 +143,7 @@ export default function App() {
             ...l
           ]);
           setRoundStartingScore(nextScore);
-          lastRoundThrowsRef.current = [...newThrows]; // 記錄本回合以利過場
+          lastRoundThrowsRef.current = [...newThrows];
           setRoundStatus("wait-next");
         }
         return newThrows;
@@ -183,9 +152,8 @@ export default function App() {
     return () => { granboard.segmentHitCallback = undefined };
   }, [granboard, score, roundThrows, roundStartingScore, roundStatus]);
 
-  // 手動結束回合
   const handleEndRound = () => {
-    if (roundStatus === "wait-next") return; //已經等下回合避免重複加分
+    if (roundStatus === "wait-next") return;
     if (roundThrows.length > 0) {
       setRoundTotalList(list => [
         ...list,
@@ -200,7 +168,6 @@ export default function App() {
     setRoundStartingScore(score);
   };
 
-  // 重置遊戲
   const handleResetGame = () => {
     setScore(START_SCORE);
     setRoundThrows([]);
@@ -212,7 +179,6 @@ export default function App() {
     lastRoundThrowsRef.current = [];
   };
 
-  // 藍牙連線
   const handleConnect = async () => {
     setConnecting(true);
     setError(null);
@@ -228,7 +194,6 @@ export default function App() {
     }
   };
 
-  // 產生歷史回合表格內容
   function generateHistoryTable() {
     const rows = [];
     let offset = round > 4 ? round - 4 : 0;
@@ -251,10 +216,9 @@ export default function App() {
     return rows;
   }
 
-  // 歷史表色塊規則
   const BG_COL_1 = [
     "#b7bbc4", "#b7bbc4", "#b7bbc4", "#b7bbc4", "#8d8f93", "#29292C"
-  ]; // 前4列與第5列加深
+  ];
   const BG_COL_2 = [
     "#8d8f93", "#8d8f93", "#8d8f93", "#8d8f93", "#29292C", "#181818"
   ];
@@ -262,14 +226,10 @@ export default function App() {
     "#fff", "#fff", "#fff", "#fff", "#FAF3E8", "#A7A7A6"
   ];
 
-  // 呼吸動畫 focus
   const focusRowIdx = round <= 4 ? round - 1 : round <= TOTAL_ROUNDS ? 3 : null;
-
-  // 右側三鏢分數顯示(依狀態/回合)
   const showThrows = roundStatus === "wait-next"
     ? lastRoundThrowsRef.current
     : roundThrows;
-
   const scoreStr = String(score).split("");
   const historyRows = generateHistoryTable();
 
@@ -297,7 +257,6 @@ export default function App() {
         gap: 0,
         userSelect: "none"
       }}>
-        {/* 501比賽標題 */}
         <div style={{
           width: "min(17vw,160px)",
           height: "min(5vw,40px)",
@@ -396,7 +355,6 @@ export default function App() {
           })}
         </div>
         <div style={{ height: "min(2vw,14px)" }}></div>
-        {/* 動作紀錄 */}
         <div style={{ width: "min(19vw,200px)" }}>
           <h3 style={{
             color: "#D9DFE6",
@@ -423,7 +381,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* 右上角選單按鈕 */}
+      {/* 右上選單按鈕 */}
       <div style={{
         position: "fixed",
         top: "min(15px,1.8vw)",
@@ -582,7 +540,7 @@ export default function App() {
         )}
       </div>
 
-      {/* 中央大分數字字串，響應式字型，字元間距50px */}
+      {/* 中央大分數字字串 */}
       <div style={{
         position: "absolute",
         top: 0,
@@ -618,7 +576,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* 呼吸動畫效果 */}
       <style>{`
         @keyframes breathe {
           0%   { background-color: #FAF3E8; }
@@ -629,7 +586,6 @@ export default function App() {
           cursor: not-allowed !important;
         }
       `}</style>
-      {/* RWD media query：手機縮放 */}
       <style>{`
         @media (max-width: 600px) {
           div[style*="minHeight: 100vh"] {
