@@ -27,10 +27,9 @@ export default function App() {
   const [round, setRound] = useState(1);
   const [animTick, setAnimTick] = useState(0);
 
-  // 明確指定 Ref 型別為 Throw[]
   const lastRoundThrowsRef = useRef<Throw[]>([]);
 
-  // 型別明確化，避免 TS2367
+  // 型別明確化
   const [roundStatus, setRoundStatus] = useState<RoundStatus>("playing");
 
   useEffect(() => {
@@ -48,34 +47,38 @@ export default function App() {
     if (!granboard) return;
 
     granboard.segmentHitCallback = (segment) => {
-      // 下回合新第一標時才清空三鏢
+      // --- 下回合新第一鏢進場，需同步分數、log、throw ---
       if (roundStatus === "wait-next") {
+        // 新一標內容計算
+        let segValue = (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? 50 : segment.Value;
+        let segType = (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? SegmentType.Other : segment.Type;
+        let newScore = score - segValue;
+
         setRoundThrows([{
-          value: (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
-            ? 50 : segment.Value,
+          value: segValue,
           longName: segment.LongName,
-          segmentType: (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL)
-            ? SegmentType.Other : segment.Type,
+          segmentType: segType,
           id: segment.ID,
         }]);
         setRoundStatus("playing");
         setRoundStartingScore(score);
+        setScore(newScore);
         setLog((l) => [
-          `新回合開始：命中 ${segment.LongName}（分值${(segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? 50 : segment.Value}），剩餘：${score - ((segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? 50 : segment.Value)}`,
+          `新回合開始：命中 ${segment.LongName}（分值${segValue}），剩餘：${newScore}`,
           ...l,
         ]);
-        return;
+        return; // 已處理第一標，直接 return 不再執行下方流程
       }
 
-      // 回合第一鏢時設定起始分數
+      // --- playing 狀態 ---
       if (roundThrows.length === 0) setRoundStartingScore(score);
 
       if (segment.ID === SegmentID.RESET_BUTTON) {
         setLog(l => ["手動按下RESET_BUTTON，回合重置（本回合三鏢全清空、分數復原）", ...l]);
         setScore(roundStartingScore);
         setRoundThrows([]);
-        // 以下斷型別問題，可用模板字串規避問題（或 as any 方式）
-        if (`${roundStatus}` === "wait-next") {
+        // 若上一回合三鏢為等待狀態，也同步清除
+        if (roundStatus === "wait-next") {
           lastRoundThrowsRef.current = [];
         }
         return;
@@ -112,6 +115,7 @@ export default function App() {
         setRound(r => r + 1);
         lastRoundThrowsRef.current = [];
         setRoundStatus("wait-next");
+        setRoundThrows([]);
         return;
       }
 
@@ -162,9 +166,9 @@ export default function App() {
       setRound(r => r + 1);
       lastRoundThrowsRef.current = [...roundThrows];
       setRoundStatus("wait-next");
+      setRoundThrows([]);
     }
     setLog(l => [`手動結束回合`, ...l]);
-    setRoundThrows([]);
     setRoundStartingScore(score);
   };
 
