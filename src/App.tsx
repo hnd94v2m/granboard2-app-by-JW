@@ -22,15 +22,11 @@ export default function App() {
   const [log, setLog] = useState<string[]>([]);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [roundStartingScore, setRoundStartingScore] = useState<number>(START_SCORE);
   const [roundTotalList, setRoundTotalList] = useState<(number | "BUST")[]>([]);
   const [round, setRound] = useState(1);
   const [animTick, setAnimTick] = useState(0);
-
   const lastRoundThrowsRef = useRef<Throw[]>([]);
-
-  // 強制將 roundStatus 強制為 RoundStatus 類型以避免型別錯誤
   const [roundStatus, setRoundStatus] = useState<RoundStatus>("playing");
 
   useEffect(() => {
@@ -48,9 +44,7 @@ export default function App() {
     if (!granboard) return;
 
     granboard.segmentHitCallback = (segment) => {
-      // 明確轉型避免比較錯誤
-      if (roundStatus as string === "wait-next") {
-        // 新回合第一標，中間分數及狀態同步更新
+      if (roundStatus.toString() === "wait-next") {
         let segValue = (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? 50 : segment.Value;
         let segType = (segment.ID === SegmentID.BULL || segment.ID === SegmentID.DBL_BULL) ? SegmentType.Other : segment.Type;
         let newScore = score - segValue;
@@ -64,7 +58,7 @@ export default function App() {
         setRoundStatus("playing");
         setRoundStartingScore(score);
         setScore(newScore);
-        setLog(l => [
+        setLog((l) => [
           `新回合開始：命中 ${segment.LongName}（分值${segValue}），剩餘：${newScore}`,
           ...l,
         ]);
@@ -77,15 +71,14 @@ export default function App() {
         setLog(l => ["手動按下RESET_BUTTON，回合重置（本回合三鏢全清空、分數復原）", ...l]);
         setScore(roundStartingScore);
         setRoundThrows([]);
-        if (roundStatus as string === "wait-next") {
-          lastRoundThrowsRef.current = [];
-        }
+        if (roundStatus.toString() === "wait-next") lastRoundThrowsRef.current = [];
         return;
       }
 
       let segType = segment.Type;
       let segValue = segment.Value;
       let segId = segment.ID;
+
       if (segId === SegmentID.BULL || segId === SegmentID.DBL_BULL) {
         segValue = 50;
         segType = SegmentType.Other;
@@ -105,19 +98,21 @@ export default function App() {
       if (isBust) {
         setLog(l => [
           nextScore === 0 && !isMasterOut
-            ? `爆鏢 BUST！（須於雙倍、三倍、紅心結標，本回合分數作廢，分數回到${roundStartingScore}）`
-            : `爆鏢 BUST！（本回合所有分數作廢，分數回到${roundStartingScore}）`, ...l]);
+            ? "爆鏢 BUST！（須於雙倍、三倍、紅心結標，本回合分數作廢，分數回到" + roundStartingScore + "）"
+            : `爆鏢 BUST！（本回合所有分數作廢，分數回到${roundStartingScore}）`,
+          ...l
+        ]);
         setScore(roundStartingScore);
         setRoundTotalList(list => [...list, "BUST"]);
         setRound(r => r + 1);
         lastRoundThrowsRef.current = [];
-        setRoundThrows([]);
         setRoundStatus("wait-next");
+        setRoundThrows([]);
         return;
       }
 
       setScore(nextScore);
-      setRoundThrows(t => {
+      setRoundThrows((t) => {
         const newThrows = [
           ...t,
           {
@@ -129,16 +124,19 @@ export default function App() {
         ];
         setLog(l => [
           `命中 ${segment.LongName}（分值${segValue}），剩餘：${nextScore}`,
-          ...l,
+          ...l
         ]);
         if (nextScore === 0 || newThrows.length >= 3) {
-          setRoundTotalList(list => [...list, newThrows.reduce((s, t) => s + t.value, 0)]);
-          setRound(r => r + 1);
+          setRoundTotalList(list => [
+            ...list,
+            newThrows.reduce((s, t) => s + t.value, 0)
+          ]);
+          setRound(r => (r + 1));
           setLog(l => [
             nextScore === 0
               ? "恭喜結束遊戲！（最後一鏢必須雙倍、三倍或紅心區）"
               : "本回合結束（3鏢）",
-            ...l,
+            ...l
           ]);
           setRoundStartingScore(nextScore);
           lastRoundThrowsRef.current = [...newThrows];
@@ -147,19 +145,22 @@ export default function App() {
         return newThrows;
       });
     };
-    return () => { granboard.segmentHitCallback = undefined; };
+    return () => { granboard.segmentHitCallback = undefined };
   }, [granboard, score, roundThrows, roundStartingScore, roundStatus]);
 
   const handleEndRound = () => {
-    if (roundStatus === "wait-next") return;
+    if (roundStatus.toString() === "wait-next") return;
     if (roundThrows.length > 0) {
-      setRoundTotalList(list => [...list, roundThrows.reduce((s, t) => s + t.value, 0)]);
+      setRoundTotalList(list => [
+        ...list,
+        roundThrows.reduce((s, t) => s + t.value, 0)
+      ]);
       setRound(r => r + 1);
       lastRoundThrowsRef.current = [...roundThrows];
       setRoundStatus("wait-next");
       setRoundThrows([]);
     }
-    setLog(l => ["手動結束回合", ...l]);
+    setLog(l => [`手動結束回合`, ...l]);
     setRoundStartingScore(score);
   };
 
@@ -191,12 +192,12 @@ export default function App() {
 
   function generateHistoryTable() {
     const rows = [];
-    const offset = round > 4 ? round - 4 : 0;
+    let offset = round > 4 ? round - 4 : 0;
     for (let i = 0; i < TABLE_ROWS; i++) {
       const roundNum = offset + i + 1;
       let showR = roundNum <= TOTAL_ROUNDS ? `R${roundNum}` : "";
       let showScore: string | number = "-";
-      if (roundTotalList.length > offset + i && offset + i < roundTotalList.length) {
+      if (roundTotalList.length > (offset + i) && (offset + i) < roundTotalList.length) {
         showScore = roundTotalList[offset + i];
       }
       if (roundNum > round || roundNum > TOTAL_ROUNDS) {
@@ -214,9 +215,11 @@ export default function App() {
   const BG_COL_1 = ["#b7bbc4", "#b7bbc4", "#b7bbc4", "#b7bbc4", "#8d8f93", "#29292C"];
   const BG_COL_2 = ["#8d8f93", "#8d8f93", "#8d8f93", "#8d8f93", "#29292C", "#181818"];
   const TXT_COLS = ["#fff", "#fff", "#fff", "#fff", "#FAF3E8", "#A7A7A6"];
-  const focusRowIdx = round <= 4 ? round - 1 : round <= TOTAL_ROUNDS ? 3 : null;
 
-  const showThrows = roundStatus === "wait-next" ? lastRoundThrowsRef.current : roundThrows;
+  const focusRowIdx = round <= 4 ? round - 1 : round <= TOTAL_ROUNDS ? 3 : null;
+  const showThrows = (roundStatus.toString() === "wait-next")
+    ? lastRoundThrowsRef.current
+    : roundThrows;
   const scoreStr = String(score).split("");
   const historyRows = generateHistoryTable();
 
@@ -231,7 +234,7 @@ export default function App() {
         padding: 0,
         fontFamily: "sans-serif",
         boxSizing: "border-box",
-        overflowX: "hidden",
+        overflowX: "hidden"
       }}
     >
       {/* 左側標頭與歷史表 + 動作紀錄 */}
@@ -245,58 +248,52 @@ export default function App() {
           flexDirection: "column",
           alignItems: "flex-start",
           gap: 0,
-          userSelect: "none",
+          userSelect: "none"
         }}
       >
-        <div
-          style={{
-            width: "min(17vw,160px)",
-            height: "min(5vw,40px)",
-            background: "#DE5459",
-            display: "flex",
-            alignItems: "center",
-            paddingLeft: "1vw",
-            paddingTop: "0.5vw",
-            paddingBottom: "0.5vw",
-            color: "#fff",
-            fontSize: "clamp(1.3rem,3vw,2rem)",
-            fontWeight: 600,
-            letterSpacing: "2px",
-            boxSizing: "border-box",
-          }}
-        >
+        <div style={{
+          width: "min(17vw,160px)",
+          height: "min(5vw,40px)",
+          background: "#DE5459",
+          display: "flex",
+          alignItems: "center",
+          paddingLeft: "1vw",
+          paddingTop: "0.5vw",
+          paddingBottom: "0.5vw",
+          color: "#fff",
+          fontSize: "clamp(1.3rem,3vw,2rem)",
+          fontWeight: 600,
+          letterSpacing: "2px",
+          boxSizing: "border-box"
+        }}>
           501
         </div>
-        <div
-          style={{
-            width: "min(17vw,160px)",
-            height: "min(3vw,20px)",
-            background: "#252525",
-            color: "#AAAFB8",
-            display: "flex",
-            alignItems: "center",
-            fontSize: "clamp(1.05rem,2vw,1.2rem)",
-            paddingLeft: "1vw",
-            paddingTop: "0.25vw",
-            paddingBottom: "0.25vw",
-            fontWeight: 500,
-            letterSpacing: "1.5px",
-          }}
-        >
+        <div style={{
+          width: "min(17vw,160px)",
+          height: "min(3vw,20px)",
+          background: "#252525",
+          color: "#AAAFB8",
+          display: "flex",
+          alignItems: "center",
+          fontSize: "clamp(1.05rem,2vw,1.2rem)",
+          paddingLeft: "1vw",
+          paddingTop: "0.25vw",
+          paddingBottom: "0.25vw",
+          fontWeight: 500,
+          letterSpacing: "1.5px"
+        }}>
           {round}/{TOTAL_ROUNDS} ROUND
         </div>
         <div style={{ height: "min(3vw,20px)" }}></div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "60% 40%",
-            width: "min(19vw,200px)",
-            minWidth: 135,
-            borderRadius: 11,
-            overflow: "hidden",
-            boxShadow: "0 4px 28px #0008",
-          }}
-        >
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "60% 40%",
+          width: "min(19vw,200px)",
+          minWidth: 135,
+          borderRadius: 11,
+          overflow: "hidden",
+          boxShadow: "0 4px 28px #0008",
+        }}>
           {historyRows.map((item, idx) => {
             const isFocus = focusRowIdx === idx;
             let leftBg = BG_COL_1[idx];
@@ -322,10 +319,9 @@ export default function App() {
                     paddingRight: "min(2vw,20px)",
                     animation: isFocus ? "breathe 1.2s infinite linear alternate" : undefined,
                     borderTopLeftRadius: idx === 0 ? 11 : undefined,
-                    borderBottomLeftRadius: idx === historyRows.length - 1 ? 11 : undefined,
-                    userSelect: "none",
-                  }}
-                >
+                    borderBottomLeftRadius: (idx === historyRows.length - 1) ? 11 : undefined,
+                    userSelect: "none"
+                  }}>
                   {item.roundNum || (idx < 4 ? "-" : "")}
                 </div>
                 <div
@@ -341,11 +337,11 @@ export default function App() {
                     fontWeight: 610,
                     paddingRight: "min(2vw,20px)",
                     borderTopRightRadius: idx === 0 ? 11 : undefined,
-                    borderBottomRightRadius: idx === historyRows.length - 1 ? 11 : undefined,
-                    userSelect: "none",
+                    borderBottomRightRadius: (idx === historyRows.length - 1) ? 11 : undefined,
+                    userSelect: "none"
                   }}
                 >
-                  {item.score !== "" ? item.score : idx < 4 ? "-" : ""}
+                  {item.score !== "" ? item.score : (idx < 4 ? "-" : "")}
                 </div>
               </React.Fragment>
             );
@@ -353,95 +349,75 @@ export default function App() {
         </div>
         <div style={{ height: "min(2vw,14px)" }}></div>
         <div style={{ width: "min(19vw,200px)" }}>
-          <h3
-            style={{
-              color: "#D9DFE6",
-              fontWeight: 600,
-              fontSize: "clamp(1.1rem,1.4vw,1.18rem)",
-              marginBottom: 4,
-              marginTop: 0,
-              userSelect: "none",
-            }}
-          >
-            動作紀錄：
-          </h3>
-          <ol
-            style={{
-              fontSize: "clamp(0.95rem,1.14vw,1.07rem)",
-              background: "#212224",
-              padding: "0.7em",
-              borderRadius: 6,
-              maxHeight: "10vw",
-              overflowY: "auto",
-              minHeight: 36,
-              color: "#DDD",
-              marginBottom: 0,
-              userSelect: "text",
-            }}
-          >
-            {log.slice(0, 7).map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
+          <h3 style={{
+            color: "#D9DFE6",
+            fontWeight: 600,
+            fontSize: "clamp(1.1rem,1.4vw,1.18rem)",
+            marginBottom: 4,
+            marginTop: 0,
+            userSelect: "none"
+          }}>動作紀錄：</h3>
+          <ol style={{
+            fontSize: "clamp(0.95rem,1.14vw,1.07rem)",
+            background: "#212224",
+            padding: "0.7em",
+            borderRadius: 6,
+            maxHeight: "10vw",
+            overflowY: "auto",
+            minHeight: 36,
+            color: "#DDD",
+            marginBottom: 0,
+            userSelect: "text"
+          }}>
+            {log.slice(0, 7).map((line, i) => <li key={i}>{line}</li>)}
           </ol>
         </div>
       </section>
-
-      {/* 右上選單按鈕 */}
-      <div
-        style={{
-          position: "fixed",
-          top: "min(15px,1.8vw)",
-          right: "min(15px,2vw)",
-          width: "min(40px,4vw)",
-          height: "min(40px,4vw)",
-          zIndex: 100,
-          userSelect: "none",
-        }}
-      >
-        <div
-          style={{
-            background: "#353535",
-            borderRadius: 8,
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 2px 9px #0008",
-          }}
-        >
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
+      <div style={{
+        position: "fixed",
+        top: "min(15px,1.8vw)",
+        right: "min(15px,2vw)",
+        width: "min(40px,4vw)",
+        height: "min(40px,4vw)",
+        zIndex: 100,
+        userSelect: "none"
+      }}>
+        <div style={{
+          background: "#353535",
+          borderRadius: 8,
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 2px 9px #0008"
+        }}>
+          {[0, 1, 2].map(i => (
+            <div key={i}
               style={{
                 width: "65%",
                 height: "13%",
                 borderRadius: 2,
                 background: "#FAF3E8",
-                marginTop: i === 0 ? 0 : "15%",
-              }}
-            ></div>
+                marginTop: i === 0 ? 0 : "15%"
+              }}>
+            </div>
           ))}
         </div>
       </div>
-
-      {/* 右側三鏢分數區 */}
-      <div
-        style={{
-          position: "fixed",
-          top: "calc(min(15px,1.8vw) + min(40px,4vw) + min(20px,2vw))",
-          right: "min(15px,2vw)",
-          width: "min(140px,13vw)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "min(16px,1.8vw)",
-          userSelect: "none",
-        }}
-      >
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
+      <div style={{
+        position: "fixed",
+        top: "calc(min(15px,1.8vw) + min(40px,4vw) + min(20px,2vw))",
+        right: "min(15px,2vw)",
+        width: "min(140px,13vw)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "min(16px,1.8vw)",
+        userSelect: "none"
+      }}>
+        {[0, 1, 2].map(i => (
+          <div key={i}
             style={{
               width: "100%",
               height: "clamp(24px,2.9vw,30px)",
@@ -461,47 +437,35 @@ export default function App() {
           </div>
         ))}
       </div>
-
-      {/* 畫面最下方灰色色塊 */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 0,
-          width: "100vw",
-          left: 0,
-          height: "clamp(80px,9vw,100px)",
-          background: "#3A3A40",
-          zIndex: 20,
-          userSelect: "none",
-        }}
-      ></div>
-
-      {/* 右下角控制按鈕區 */}
-      <div
-        style={{
-          position: "fixed",
-          right: "min(32px,3vw)",
-          bottom: "clamp(96px,11vw,136px)",
-          width: "min(350px,38vw)",
-          minWidth: 150,
-          zIndex: 60,
+      <div style={{
+        position: "fixed",
+        bottom: 0,
+        width: "100vw",
+        left: 0,
+        height: "clamp(80px,9vw,100px)",
+        background: "#3A3A40",
+        zIndex: 20,
+        userSelect: "none"
+      }}></div>
+      <div style={{
+        position: "fixed",
+        right: "min(32px,3vw)",
+        bottom: "clamp(96px,11vw,136px)",
+        width: "min(350px,38vw)",
+        minWidth: 150,
+        zIndex: 60,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: "min(18px,2vw)"
+      }}>
+        <div style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-end",
-          gap: "min(18px,2vw)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-end",
-            gap: "min(14px,1.6vw)",
-          }}
-        >
-          <button
-            onClick={handleConnect}
-            disabled={!!granboard || connecting}
+          gap: "min(14px,1.6vw)"
+        }}>
+          <button onClick={handleConnect} disabled={!!granboard || connecting}
             style={{
               background: "#157DD7",
               color: "#FFF",
@@ -513,13 +477,12 @@ export default function App() {
               boxShadow: "0 6px 16px #0006",
               cursor: granboard ? "not-allowed" : "pointer",
               opacity: granboard ? 0.45 : 1,
-              userSelect: "none",
+              userSelect: "none"
             }}
           >
             {connecting ? "連線中..." : granboard ? "已連線" : "連接藍牙飛鏢板"}
           </button>
-          <button
-            onClick={handleEndRound}
+          <button onClick={handleEndRound}
             style={{
               background: "#888",
               color: "#FFF",
@@ -529,13 +492,11 @@ export default function App() {
               border: "none",
               borderRadius: 4,
               cursor: "pointer",
-              userSelect: "none",
-            }}
-          >
+              userSelect: "none"
+            }}>
             手動結束回合
           </button>
-          <button
-            onClick={handleResetGame}
+          <button onClick={handleResetGame}
             style={{
               background: "#dadbdb",
               color: "#222",
@@ -545,74 +506,58 @@ export default function App() {
               border: "none",
               borderRadius: 4,
               cursor: "pointer",
-              userSelect: "none",
-            }}
-          >
+              userSelect: "none"
+            }}>
             重新開始
           </button>
         </div>
-        {error && !granboard && (
-          <div
-            style={{
-              color: "red",
-              fontWeight: 600,
-              fontSize: "clamp(1.11rem,1.58vw,1.21rem)",
-              marginTop: 5,
-              marginRight: 2,
-              userSelect: "text",
-            }}
-          >
+        {(error && !granboard) && (
+          <div style={{
+            color: "red",
+            fontWeight: 600,
+            fontSize: "clamp(1.11rem,1.58vw,1.21rem)",
+            marginTop: 5,
+            marginRight: 2,
+            userSelect: "text"
+          }}>
             {error}
           </div>
         )}
       </div>
-
-      {/* 中央大分數字字串 */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: "clamp(80px,9vw,100px)",
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: "clamp(80px,9vw,100px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        pointerEvents: "none",
+        zIndex: 10
+      }}>
+        <div style={{
           display: "flex",
+          flexDirection: "row",
+          gap: "clamp(38px,4vw,50px)",
           alignItems: "center",
-          justifyContent: "center",
-          pointerEvents: "none",
-          zIndex: 10,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            gap: "clamp(38px,4vw,50px)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
+          justifyContent: "center"
+        }}>
           {scoreStr.map((char, idx) => (
-            <span
-              key={idx}
-              style={{
-                color: "#D9DFE6",
-                fontSize: "clamp(130px,28vw,500px)",
-                fontWeight: 800,
-                lineHeight: 1,
-                textShadow:
-                  "0 4px 48px #000a, 0 8px 80px #4444, 0 1.5vw 5vw #0007",
-                letterSpacing: "-0.09em",
-                textAlign: "center",
-                fontFamily: "inherit",
-                userSelect: "none",
-              }}
-            >
-              {char}
-            </span>
+            <span key={idx} style={{
+              color: "#D9DFE6",
+              fontSize: "clamp(130px,28vw,500px)",
+              fontWeight: 800,
+              lineHeight: 1,
+              textShadow: "0 4px 48px #000a, 0 8px 80px #4444, 0 1.5vw 5vw #0007",
+              letterSpacing: "-0.09em",
+              textAlign: "center",
+              fontFamily: "inherit",
+              userSelect: "none"
+            }}>{char}</span>
           ))}
         </div>
       </div>
-
       <style>{`
         @keyframes breathe {
           0%   { background-color: #FAF3E8; }
